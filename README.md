@@ -21,3 +21,4 @@ This is a development starter, not a deployed service and not a live trading sys
 4. Open http://localhost:3000.
 
 For deployment, use a hosting plan whose terms permit the intended use. Keep all secret keys server-side.
+ApexOptions V3 deployment update
