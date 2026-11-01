@@ -30,6 +30,45 @@ const DEMO_MARKETS = [
   { symbol: "ETH/USD", price: 3528.75, change: "+0.64%" }
 ];
 
+function CandlestickChart({ symbol }: { symbol: string }) {
+  const [timeframe, setTimeframe] = useState("1m");
+  const candles = Array.from({ length: 48 }, (_, i) => {
+    const base = 158 + Math.sin(i * 0.42) * 17 + Math.cos(i * 0.17) * 12 + i * 0.38;
+    const open = base + Math.sin(i * 2.13) * 5;
+    const close = base + Math.cos(i * 1.71) * 6;
+    return { x: 34 + i * 17, open, close, high: Math.min(open, close) - (2 + (i % 4)), low: Math.max(open, close) + (3 + (i % 5)) };
+  });
+  const y = (value: number) => 275 - value;
+  return (
+    <section className="panel liveChart">
+      <div className="chartTop">
+        <div><span className="chartSymbol">{symbol}</span><span className="chartSub"> · OTC DEMO</span><div className="chartPrice">1.08425 <small className="positive">+0.12%</small></div></div>
+        <span className="chartBadge">● MARKET SIMULATION</span>
+      </div>
+      <div className="timeframes">
+        {["5s", "15s", "30s", "1m", "5m", "15m", "1h"].map((t) => <button type="button" key={t} onClick={() => setTimeframe(t)} className={timeframe === t ? "timeActive" : ""}>{t}</button>)}
+        <span className="chartTools">⌁　＋　－　⛶</span>
+      </div>
+      <div className="candleCanvas">
+        <svg viewBox="0 0 900 320" role="img" aria-label={`Illustrative simulated candlestick chart for ${symbol}`} preserveAspectRatio="none">
+          {[45, 100, 155, 210, 265].map((v) => <g key={v}><line x1="0" x2="900" y1={v} y2={v} stroke="#203449" strokeDasharray="4 5"/><text x="855" y={v - 5} fill="#71879a" fontSize="10">1.08{(v / 100).toFixed(2)}</text></g>)}
+          {candles.map((c, i) => {
+            const up = c.close > c.open;
+            const color = up ? "#16c79a" : "#ef6477";
+            const top = y(Math.min(c.open, c.close));
+            const bottom = y(Math.max(c.open, c.close));
+            return <g key={i}><line x1={c.x} x2={c.x} y1={y(c.high)} y2={y(c.low)} stroke={color} strokeWidth="1.5"/><rect x={c.x - 5} y={top} width="10" height={Math.max(4, bottom - top)} fill={color} rx="1"/></g>;
+          })}
+          <line x1="0" x2="900" y1={y(candles[47].close)} y2={y(candles[47].close)} stroke="#25c99c" strokeDasharray="5 4"/>
+          <rect x="817" y={y(candles[47].close)-12} width="75" height="22" rx="4" fill="#16a982"/><text x="854" y={y(candles[47].close)+3} textAnchor="middle" fill="#041b18" fontSize="11" fontWeight="bold">1.08425</text>
+        </svg>
+      </div>
+      <div className="chartFoot"><span>09:30</span><span>09:45</span><span>10:00</span><span>10:15</span><span>10:30</span><span>الشموع: {timeframe}</span></div>
+      <p className="chartDisclaimer">رسم توضيحي تجريبي ببيانات مصطنعة — ليس أسعاراً مباشرة من السوق.</p>
+    </section>
+  );
+}
+
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState("");
@@ -129,6 +168,8 @@ export default function Home() {
         <h1>Trade interface.<br /><em>Built for clarity.</em></h1>
         <p className="muted">A bilingual-ready demo platform connected to Supabase. Virtual funds only; real-money trading is disabled.</p>
       </section>
+
+      <CandlestickChart symbol={symbol} />
 
       {!session ? (
         <section className="panel auth">
