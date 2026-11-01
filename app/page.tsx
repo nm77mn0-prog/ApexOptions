@@ -24,47 +24,98 @@ type DemoPosition = {
 };
 
 const DEMO_MARKETS = [
-  { symbol: "EUR/USD", price: 1.08425, change: "+0.12%" },
-  { symbol: "GBP/USD", price: 1.27184, change: "-0.08%" },
-  { symbol: "BTC/USD", price: 67420.5, change: "+1.42%" },
-  { symbol: "ETH/USD", price: 3528.75, change: "+0.64%" }
+  { symbol: "EUR/USD" },
+  { symbol: "GBP/USD" },
+  { symbol: "USD/JPY" },
+  { symbol: "AUD/USD" },
+  { symbol: "USD/CHF" },
+  { symbol: "USD/CAD" }
 ];
 
 function CandlestickChart({ symbol }: { symbol: string }) {
-  const [timeframe, setTimeframe] = useState("1m");
-  const candles = Array.from({ length: 48 }, (_, i) => {
-    const base = 158 + Math.sin(i * 0.42) * 17 + Math.cos(i * 0.17) * 12 + i * 0.38;
-    const open = base + Math.sin(i * 2.13) * 5;
-    const close = base + Math.cos(i * 1.71) * 6;
-    return { x: 34 + i * 17, open, close, high: Math.min(open, close) - (2 + (i % 4)), low: Math.max(open, close) + (3 + (i % 5)) };
-  });
-  const y = (value: number) => 275 - value;
+  const [timeframe, setTimeframe] = useState("1min");
+  const [candles, setCandles] = useState<Array<{ datetime: string; open: number; high: number; low: number; close: number }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [feedError, setFeedError] = useState("");
+  const [updatedAt, setUpdatedAt] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/forex?symbol=${encodeURIComponent(symbol)}&interval=${timeframe}`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || data.status !== "ok" || !Array.isArray(data.values)) {
+          throw new Error(data.message || data.code || "تعذر جلب بيانات الفوركس");
+        }
+        const next = data.values.map((item: any) => ({
+          datetime: String(item.datetime || ""),
+          open: Number(item.open), high: Number(item.high),
+          low: Number(item.low), close: Number(item.close)
+        })).filter((item: any) => [item.open, item.high, item.low, item.close].every(Number.isFinite)).reverse();
+        if (!next.length) throw new Error("لم تصل شموع لهذا الزوج حالياً");
+        if (active) {
+          setCandles(next);
+          setFeedError("");
+          setUpdatedAt(new Date().toLocaleTimeString());
+          setLoading(false);
+        }
+      } catch (error) {
+        if (active) {
+          setFeedError(error instanceof Error ? error.message : "خطأ في الاتصال بمصدر الأسعار");
+          setLoading(false);
+        }
+      }
+    };
+    setLoading(true);
+    load();
+    const timer = window.setInterval(load, 60000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [symbol, timeframe]);
+
+  const latest = candles[candles.length - 1];
+  const first = candles[0];
+  const change = first && latest ? ((latest.close - first.open) / first.open) * 100 : 0;
+  const decimals = symbol === "USD/JPY" ? 3 : 5;
+  const min = candles.length ? Math.min(...candles.map((c) => c.low)) : 0;
+  const max = candles.length ? Math.max(...candles.map((c) => c.high)) : 1;
+  const range = Math.max(max - min, Math.abs(max) * 0.0001, 0.00001);
+  const y = (value: number) => 270 - ((value - min) / range) * 225;
+  const x = (index: number) => 22 + index * (805 / Math.max(candles.length - 1, 1));
+
   return (
     <section className="panel liveChart">
       <div className="chartTop">
-        <div><span className="chartSymbol">{symbol}</span><span className="chartSub"> · OTC DEMO</span><div className="chartPrice">1.08425 <small className="positive">+0.12%</small></div></div>
-        <span className="chartBadge">● MARKET SIMULATION</span>
+        <div><span className="chartSymbol">{symbol}</span><span className="chartSub"> · FOREX</span>
+          <div className="chartPrice">{latest ? latest.close.toFixed(decimals) : "—"} {latest && <small className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? "+" : ""}{change.toFixed(3)}%</small>}</div>
+        </div>
+        <span className="chartBadge">● TWELVE DATA</span>
       </div>
       <div className="timeframes">
-        {["5s", "15s", "30s", "1m", "5m", "15m", "1h"].map((t) => <button type="button" key={t} onClick={() => setTimeframe(t)} className={timeframe === t ? "timeActive" : ""}>{t}</button>)}
-        <span className="chartTools">⌁　＋　－　⛶</span>
+        {[{ label: "1m", value: "1min" }, { label: "5m", value: "5min" }, { label: "15m", value: "15min" }, { label: "1h", value: "1h" }].map((t) =>
+          <button type="button" key={t.value} onClick={() => setTimeframe(t.value)} className={timeframe === t.value ? "timeActive" : ""}>{t.label}</button>
+        )}
+        <span className="chartTools">{loading ? "جارٍ التحميل…" : updatedAt ? `آخر تحديث ${updatedAt}` : ""}</span>
       </div>
       <div className="candleCanvas">
-        <svg viewBox="0 0 900 320" role="img" aria-label={`Illustrative simulated candlestick chart for ${symbol}`} preserveAspectRatio="none">
-          {[45, 100, 155, 210, 265].map((v) => <g key={v}><line x1="0" x2="900" y1={v} y2={v} stroke="#203449" strokeDasharray="4 5"/><text x="855" y={v - 5} fill="#71879a" fontSize="10">1.08{(v / 100).toFixed(2)}</text></g>)}
+        {candles.length > 0 ? <svg viewBox="0 0 900 320" role="img" aria-label={`Real forex candlestick chart for ${symbol}`} preserveAspectRatio="none">
+          {[45, 100, 155, 210, 265].map((v) => <line key={v} x1="0" x2="900" y1={v} y2={v} stroke="#203449" strokeDasharray="4 5" />)}
           {candles.map((c, i) => {
-            const up = c.close > c.open;
+            const up = c.close >= c.open;
             const color = up ? "#16c79a" : "#ef6477";
-            const top = y(Math.min(c.open, c.close));
-            const bottom = y(Math.max(c.open, c.close));
-            return <g key={i}><line x1={c.x} x2={c.x} y1={y(c.high)} y2={y(c.low)} stroke={color} strokeWidth="1.5"/><rect x={c.x - 5} y={top} width="10" height={Math.max(4, bottom - top)} fill={color} rx="1"/></g>;
+            const top = y(Math.max(c.open, c.close));
+            const bottom = y(Math.min(c.open, c.close));
+            return <g key={c.datetime + i}>
+              <line x1={x(i)} x2={x(i)} y1={y(c.high)} y2={y(c.low)} stroke={color} strokeWidth="1.5" />
+              <rect x={x(i) - Math.max(3, 300 / candles.length / 2)} y={top} width={Math.max(4, 600 / candles.length)} height={Math.max(2, bottom - top)} fill={color} rx="1" />
+            </g>;
           })}
-          <line x1="0" x2="900" y1={y(candles[47].close)} y2={y(candles[47].close)} stroke="#25c99c" strokeDasharray="5 4"/>
-          <rect x="817" y={y(candles[47].close)-12} width="75" height="22" rx="4" fill="#16a982"/><text x="854" y={y(candles[47].close)+3} textAnchor="middle" fill="#041b18" fontSize="11" fontWeight="bold">1.08425</text>
-        </svg>
+          {latest && <><line x1="0" x2="900" y1={y(latest.close)} y2={y(latest.close)} stroke="#25c99c" strokeDasharray="5 4" /></>}
+        </svg> : <div className="chartMessage">{loading ? "جارٍ الاتصال بمصدر أسعار الفوركس…" : "لا توجد بيانات معروضة حالياً"}</div>}
       </div>
-      <div className="chartFoot"><span>09:30</span><span>09:45</span><span>10:00</span><span>10:15</span><span>10:30</span><span>الشموع: {timeframe}</span></div>
-      <p className="chartDisclaimer">رسم توضيحي تجريبي ببيانات مصطنعة — ليس أسعاراً مباشرة من السوق.</p>
+      <div className="chartFoot"><span>{candles[0]?.datetime || "—"}</span><span>{latest?.datetime || "—"}</span><span>{timeframe === "1min" ? "1 دقيقة" : timeframe === "5min" ? "5 دقائق" : timeframe === "15min" ? "15 دقيقة" : "ساعة"}</span></div>
+      {feedError && <p className="chartError">{feedError}</p>}
+      <p className="chartDisclaimer">بيانات أسعار فوركس من Twelve Data، تتحدث كل 60 ثانية. قد تختلف عن أسعار وسيط التداول، وتخضع لحدود وترخيص مزود البيانات.</p>
     </section>
   );
 }
@@ -148,7 +199,7 @@ export default function Home() {
     const position: DemoPosition = {
       id: `demo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       symbol, side, stake: amount, expiry, openedAt: new Date().toLocaleString(),
-      referencePrice: market.price
+      referencePrice: 0
     };
     setPositions((current) => [position, ...current].slice(0, 10));
     setMessage("Demo position created in this browser session only. No funds were moved.");
@@ -207,12 +258,12 @@ export default function Home() {
               <div><p className="eyebrow">PRACTICE TERMINAL</p><h2>Open a demo position</h2></div>
               <span className="simTag">SIMULATED</span>
             </div>
-            <p className="muted tradingIntro">Prices below are sample reference values, not live market quotes.</p>
+            <p className="muted tradingIntro">Reference market selection only. Demo positions do not execute or settle.</p>
             <div className="marketStrip">
               {DEMO_MARKETS.map((market) => (
                 <button type="button" className={symbol === market.symbol ? "market activeMarket" : "market"} key={market.symbol} onClick={() => setSymbol(market.symbol)}>
-                  <b>{market.symbol}</b><strong>{market.price.toLocaleString(undefined, { maximumFractionDigits: 5 })}</strong>
-                  <small className={market.change.startsWith("+") ? "positive" : "negative"}>{market.change}</small>
+                  <b>{market.symbol}</b><strong>Forex</strong>
+                  <small className="positive">FX</small>
                 </button>
               ))}
             </div>
@@ -238,7 +289,7 @@ export default function Home() {
                 <button type="button" className={side === "sell" ? "direction sell selected" : "direction sell"} onClick={() => setSide("sell")}>Sell / هبوط</button>
               </div>
               <div className="ticketSummary">
-                <span>Reference price <b>{selectedMarket.price.toLocaleString(undefined, { maximumFractionDigits: 5 })}</b></span>
+                <span>Market <b>{selectedMarket.symbol}</b></span>
                 <span>Amount <b>${Number(stake || 0).toFixed(2)} virtual</b></span>
               </div>
               <button className="openPosition" type="submit">Open demo position</button>
@@ -254,7 +305,7 @@ export default function Home() {
                 <span className={position.side === "buy" ? "positive" : "negative"}>{position.side.toUpperCase()}</span>
                 <span>${position.stake.toFixed(2)}</span>
                 <small>{position.expiry}</small>
-                <small>Ref. {position.referencePrice}</small>
+                <small>Demo only</small>
               </div>
             ))}</div> : <p className="muted">No demo positions opened in this session yet.</p>}
           </section>
@@ -271,7 +322,7 @@ export default function Home() {
       {message && <p className="message" role="status">{message}</p>}
       <section className="panel notice">
         <b>Development status</b>
-        <p>Authentication and read-only demo account views are connected. The practice ticket creates temporary on-screen demo positions only. Persistent trade creation, balance changes, live market feeds, deposits, withdrawals, and real-money execution remain disabled pending secure server-side validation, independent testing, and appropriate legal review.</p>
+        <p>Authentication and read-only demo account views are connected. The practice ticket creates temporary on-screen demo positions only. Persistent trade creation, balance changes, deposits, withdrawals, and real-money execution remain disabled pending secure server-side validation, independent testing, and appropriate legal review.</p>
       </section>
       <footer>APEXOPTIONS · DEMO ONLY · NOT A BROKER OR EXCHANGE</footer>
     </main>
