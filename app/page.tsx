@@ -61,7 +61,7 @@ function CandlestickChart({ symbol }: { symbol: string }) {
     };
     setLoading(true);
     load();
-    const timer = window.setInterval(load, 60000);
+    const timer = window.setInterval(load, 120000);
     return () => { active = false; window.clearInterval(timer); };
   }, [symbol, timeframe]);
 
