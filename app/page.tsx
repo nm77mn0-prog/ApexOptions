@@ -27,6 +27,7 @@ const pairs: Pair[] = [
 function CandlestickChart({ symbol }: { symbol: string }) {
   const [timeframe, setTimeframe] = useState("1min");
   const [candles, setCandles] = useState<Array<{ datetime: string; open: number; high: number; low: number; close: number }>>([]);
+  const [quotePrice, setQuotePrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [feedError, setFeedError] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
@@ -48,6 +49,7 @@ function CandlestickChart({ symbol }: { symbol: string }) {
         if (!next.length) throw new Error("لم تصل شموع لهذا الزوج حالياً");
         if (active) {
           setCandles(next);
+          setQuotePrice(data.price != null && Number.isFinite(Number(data.price)) ? Number(data.price) : null);
           setFeedError("");
           setUpdatedAt(new Date().toLocaleTimeString());
           setLoading(false);
@@ -60,6 +62,7 @@ function CandlestickChart({ symbol }: { symbol: string }) {
       }
     };
     setLoading(true);
+    setQuotePrice(null);
     load();
     const timer = window.setInterval(load, 120000);
     return () => { active = false; window.clearInterval(timer); };
@@ -79,7 +82,7 @@ function CandlestickChart({ symbol }: { symbol: string }) {
     <section className="panel liveChart">
       <div className="chartTop">
         <div><span className="chartSymbol">{symbol}</span><span className="chartSub"> · FOREX</span>
-          <div className="chartPrice">{latest ? latest.close.toFixed(decimals) : "—"} {latest && <small className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? "+" : ""}{change.toFixed(3)}%</small>}</div>
+          <div className="chartPrice">{quotePrice !== null ? quotePrice.toFixed(decimals) : latest ? latest.close.toFixed(decimals) : "—"} {latest && <small className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? "+" : ""}{change.toFixed(3)}%</small>}</div>
         </div>
         <span className="chartBadge">● TWELVE DATA</span>
       </div>
