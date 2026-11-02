@@ -260,7 +260,7 @@ export default function Home() {
               <input className="tradeInput" type="number" min="1" step="1" value={stake} onChange={(e) => { setStake(e.target.value); setPreview(null); }} />
               <div className="quickAmounts">{["10", "25", "50", "100"].map((v) => <button key={v} className={stake === v ? "quick activeQuick" : "quick"} onClick={() => { setStake(v); setPreview(null); }}>${v}</button>)}</div>
               <label>Trade duration</label>
-              <select className="tradeInput" value={duration} onChange={(e) => setDuration(e.target.value)}><option>30 seconds</option><option>60 seconds</option><option>2 minutes</option><option>5 minutes</option></select>
+              <select className="tradeInput" value={duration} onChange={(e) => { setDuration(e.target.value); setPreview(null); }}><option value="5 seconds">5 seconds</option><option value="10 seconds">10 seconds</option><option value="15 seconds">15 seconds</option><option value="30 seconds">30 seconds</option><option value="45 seconds">45 seconds</option><option value="60 seconds">1 minute</option><option value="2 minutes">2 minutes</option><option value="5 minutes">5 minutes</option></select>
               <div className="payoutBox"><span>Illustrative return rate</span><b>{pair.payout}%</b><small>Potential total return: ${potentialReturn.toFixed(2)}</small></div>
               <div className="directionButtons"><button className="upButton" onClick={() => showPreview("UP")}>↑ <span>UP</span></button><button className="downButton" onClick={() => showPreview("DOWN")}>↓ <span>DOWN</span></button></div>
               <p className="orderHint">Buttons create a local preview only. They do not execute or save a trade.</p>
