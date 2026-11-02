@@ -16,15 +16,101 @@ type Trade = {
 type Pair = { symbol: string; name: string; price: string; change: string; payout: number };
 
 const pairs: Pair[] = [
-  { symbol: "EUR/USD", name: "Euro / US Dollar", price: "1.08426", change: "+0.18%", payout: 88 },
-  { symbol: "GBP/USD", name: "British Pound / US Dollar", price: "1.27184", change: "+0.12%", payout: 86 },
-  { symbol: "USD/JPY", name: "US Dollar / Japanese Yen", price: "149.382", change: "-0.08%", payout: 84 },
-  { symbol: "AUD/USD", name: "Australian Dollar / US Dollar", price: "0.65418", change: "+0.05%", payout: 82 },
-  { symbol: "USD/CHF", name: "US Dollar / Swiss Franc", price: "0.88241", change: "-0.03%", payout: 80 },
-  { symbol: "GOLD", name: "Gold / US Dollar", price: "2,342.60", change: "+0.31%", payout: 80 }
+  { symbol: "EUR/USD", name: "Euro / US Dollar", price: "عرض السعر الحي", change: "اختر الزوج", payout: 88 },
+  { symbol: "GBP/USD", name: "British Pound / US Dollar", price: "عرض السعر الحي", change: "اختر الزوج", payout: 86 },
+  { symbol: "USD/JPY", name: "US Dollar / Japanese Yen", price: "عرض السعر الحي", change: "اختر الزوج", payout: 84 },
+  { symbol: "AUD/USD", name: "Australian Dollar / US Dollar", price: "عرض السعر الحي", change: "اختر الزوج", payout: 82 },
+  { symbol: "USD/CHF", name: "US Dollar / Swiss Franc", price: "عرض السعر الحي", change: "اختر الزوج", payout: 80 },
+  { symbol: "USD/CAD", name: "US Dollar / Canadian Dollar", price: "عرض السعر الحي", change: "اختر الزوج", payout: 80 }
 ];
 
-const chartPoints = "0,112 28,105 56,116 84,91 112,98 140,76 168,83 196,62 224,70 252,47 280,56 308,36 336,43 364,22 392,31 420,12";
+function CandlestickChart({ symbol }: { symbol: string }) {
+  const [timeframe, setTimeframe] = useState("1min");
+  const [candles, setCandles] = useState<Array<{ datetime: string; open: number; high: number; low: number; close: number }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [feedError, setFeedError] = useState("");
+  const [updatedAt, setUpdatedAt] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/forex?symbol=${encodeURIComponent(symbol)}&interval=${timeframe}`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || data.status !== "ok" || !Array.isArray(data.values)) {
+          throw new Error(data.message || data.code || "تعذر جلب بيانات الفوركس");
+        }
+        const next = data.values.map((item: any) => ({
+          datetime: String(item.datetime || ""),
+          open: Number(item.open), high: Number(item.high),
+          low: Number(item.low), close: Number(item.close)
+        })).filter((item: any) => [item.open, item.high, item.low, item.close].every(Number.isFinite)).reverse();
+        if (!next.length) throw new Error("لم تصل شموع لهذا الزوج حالياً");
+        if (active) {
+          setCandles(next);
+          setFeedError("");
+          setUpdatedAt(new Date().toLocaleTimeString());
+          setLoading(false);
+        }
+      } catch (error) {
+        if (active) {
+          setFeedError(error instanceof Error ? error.message : "خطأ في الاتصال بمصدر الأسعار");
+          setLoading(false);
+        }
+      }
+    };
+    setLoading(true);
+    load();
+    const timer = window.setInterval(load, 60000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [symbol, timeframe]);
+
+  const latest = candles[candles.length - 1];
+  const first = candles[0];
+  const change = first && latest ? ((latest.close - first.open) / first.open) * 100 : 0;
+  const decimals = symbol === "USD/JPY" ? 3 : 5;
+  const min = candles.length ? Math.min(...candles.map((c) => c.low)) : 0;
+  const max = candles.length ? Math.max(...candles.map((c) => c.high)) : 1;
+  const range = Math.max(max - min, Math.abs(max) * 0.0001, 0.00001);
+  const y = (value: number) => 270 - ((value - min) / range) * 225;
+  const x = (index: number) => 22 + index * (805 / Math.max(candles.length - 1, 1));
+
+  return (
+    <section className="panel liveChart">
+      <div className="chartTop">
+        <div><span className="chartSymbol">{symbol}</span><span className="chartSub"> · FOREX</span>
+          <div className="chartPrice">{latest ? latest.close.toFixed(decimals) : "—"} {latest && <small className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? "+" : ""}{change.toFixed(3)}%</small>}</div>
+        </div>
+        <span className="chartBadge">● TWELVE DATA</span>
+      </div>
+      <div className="timeframes">
+        {[{ label: "1m", value: "1min" }, { label: "5m", value: "5min" }, { label: "15m", value: "15min" }, { label: "1h", value: "1h" }].map((t) =>
+          <button type="button" key={t.value} onClick={() => setTimeframe(t.value)} className={timeframe === t.value ? "timeActive" : ""}>{t.label}</button>
+        )}
+        <span className="chartTools">{loading ? "جارٍ التحميل…" : updatedAt ? `آخر تحديث ${updatedAt}` : ""}</span>
+      </div>
+      <div className="candleCanvas">
+        {candles.length > 0 ? <svg viewBox="0 0 900 320" role="img" aria-label={`Real forex candlestick chart for ${symbol}`} preserveAspectRatio="none">
+          {[45, 100, 155, 210, 265].map((v) => <line key={v} x1="0" x2="900" y1={v} y2={v} stroke="#203449" strokeDasharray="4 5" />)}
+          {candles.map((c, i) => {
+            const up = c.close >= c.open;
+            const color = up ? "#16c79a" : "#ef6477";
+            const top = y(Math.max(c.open, c.close));
+            const bottom = y(Math.min(c.open, c.close));
+            return <g key={c.datetime + i}>
+              <line x1={x(i)} x2={x(i)} y1={y(c.high)} y2={y(c.low)} stroke={color} strokeWidth="1.5" />
+              <rect x={x(i) - Math.max(3, 300 / candles.length / 2)} y={top} width={Math.max(4, 600 / candles.length)} height={Math.max(2, bottom - top)} fill={color} rx="1" />
+            </g>;
+          })}
+          {latest && <><line x1="0" x2="900" y1={y(latest.close)} y2={y(latest.close)} stroke="#25c99c" strokeDasharray="5 4" /></>}
+        </svg> : <div className="chartMessage">{loading ? "جارٍ الاتصال بمصدر أسعار الفوركس…" : "لا توجد بيانات معروضة حالياً"}</div>}
+      </div>
+      <div className="chartFoot"><span>{candles[0]?.datetime || "—"}</span><span>{latest?.datetime || "—"}</span><span>{timeframe === "1min" ? "1 دقيقة" : timeframe === "5min" ? "5 دقائق" : timeframe === "15min" ? "15 دقيقة" : "ساعة"}</span></div>
+      {feedError && <p className="chartError">{feedError}</p>}
+      <p className="chartDisclaimer">بيانات أسعار فوركس من Twelve Data، تتحدث كل 60 ثانية. قد تختلف عن أسعار وسيط التداول، وتخضع لحدود وترخيص مزود البيانات.</p>
+    </section>
+  );
+}
 
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
@@ -123,7 +209,7 @@ export default function Home() {
       <section className="hero compactHero">
         <p className="eyebrow">APEXOPTIONS V3 · DEMO TRADING DESK</p>
         <h1>Trade with <em>clarity.</em></h1>
-        <p className="muted">A practice interface using virtual funds. Displayed market values are illustrative samples, not live quotes.</p>
+        <p className="muted">A practice interface using virtual funds. Live market candles are supplied by Twelve Data when the provider API key is configured.</p>
       </section>
 
       {!session ? (
@@ -151,28 +237,18 @@ export default function Home() {
           <section className="tradingLayout">
             <div className="marketColumn">
               <div className="panel marketPanel">
-                <div className="sectionHeading"><div><span className="eyebrow">MARKETS</span><h2>Currency pairs</h2></div><span className="sampleTag">SAMPLE DATA</span></div>
+                <div className="sectionHeading"><div><span className="eyebrow">MARKETS</span><h2>Currency pairs</h2></div><span className="sampleTag">LIVE MARKET DATA</span></div>
                 <div className="pairList">
                   {pairs.map((item) => (
                     <button key={item.symbol} className={selected === item.symbol ? "pair selectedPair" : "pair"} onClick={() => { setSelected(item.symbol); setPreview(null); }}>
                       <span className="pairName"><b>{item.symbol}</b><small>{item.name}</small></span>
-                      <span className="pairQuote"><b>{item.price}</b><small className={item.change.startsWith("+") ? "green" : "red"}>{item.change}</small></span>
+                      <span className="pairQuote"><b>عرض السعر الحي</b><small>اختر الزوج</small></span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="panel chartPanel">
-                <div className="chartTop"><div><span className="muted">Selected market</span><h2>{pair.symbol}</h2></div><div className="chartPrice"><b>{pair.price}</b><small className={pair.change.startsWith("+") ? "green" : "red"}>{pair.change}</small></div></div>
-                <div className="chartWrap">
-                  <svg viewBox="0 0 420 140" role="img" aria-label="Illustrative sample price chart">
-                    <defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#22c99a" stopOpacity=".28"/><stop offset="100%" stopColor="#22c99a" stopOpacity="0"/></linearGradient></defs>
-                    <path d={`M ${chartPoints.replaceAll(" ", " L ")} L 420 140 L 0 140 Z`} fill="url(#chartFill)" />
-                    <polyline points={chartPoints} fill="none" stroke="#29d6a5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-                <div className="chartFoot"><span>Illustrative chart</span><span>Live feed not connected</span></div>
-              </div>
+              <CandlestickChart symbol={pair.symbol} />
             </div>
 
             <aside className="panel orderPanel">
@@ -197,7 +273,7 @@ export default function Home() {
       )}
 
       {message && <p className="message" role="status">{message}</p>}
-      <section className="panel notice"><b>Demo and compliance notice</b><p>This version is for interface testing only. Quotes and returns shown here are illustrative. Trade previews are not executed or stored, and balances cannot be changed from this screen. Live market feeds, trade execution, deposits, withdrawals, and real-money services remain disabled pending secure backend implementation and appropriate legal review.</p></section>
+      <section className="panel notice"><b>Demo and compliance notice</b><p>This version is for interface testing only. Market data is supplied by Twelve Data and may be delayed or limited by the provider. Demo returns remain illustrative. Trade previews are not executed or stored, and balances cannot be changed from this screen. Live market feeds, trade execution, deposits, withdrawals, and real-money services remain disabled pending secure backend implementation and appropriate legal review.</p></section>
       <footer>APEXOPTIONS · DEMO ONLY · NOT A BROKER OR EXCHANGE</footer>
     </main>
   );
